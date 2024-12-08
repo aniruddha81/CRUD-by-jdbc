@@ -8,17 +8,21 @@ public class Main {
 
     public static void main(String[] args) {
         try (Scanner input = new Scanner(System.in);
-             Connection con = DriverManager.getConnection(URL, USER, PASSWORD)) {
+             Connection con = DriverManager.getConnection(URL, USER, PASSWORD);
+             Statement stmt = con.createStatement()) {
+
+            ResultSet rs = null;
+
             while (true) {
                 displayMenu();
                 int choice = input.nextInt();
                 input.nextLine();
 
                 switch (choice) {
-                    case 1 -> readData(con);
-                    case 2 -> insertData(con, input);
-                    case 3 -> deleteData(con, input);
-                    case 4 -> updateData(con, input);
+                    case 1 -> rs = readData(stmt, rs);
+                    case 2 -> insertData(stmt, input);
+                    case 3 -> deleteData(stmt, input);
+                    case 4 -> updateData(stmt, input);
                     case 5 -> {
                         System.out.println("Exiting the program...");
                         return;
@@ -41,11 +45,12 @@ public class Main {
         System.out.print("Enter your choice: ");
     }
 
-    private static void readData(Connection con) {
+    private static ResultSet readData(Statement stmt, ResultSet rs) {
         String query = "SELECT * FROM students";
 
-        try (Statement stmt = con.createStatement();
-             ResultSet rs = stmt.executeQuery(query)) {
+        try {
+            if (rs != null && !rs.isClosed()) rs.close(); // Close previous ResultSet
+            rs = stmt.executeQuery(query);
 
             System.out.println("\nCurrent Students in the Database:");
             while (rs.next()) {
@@ -58,29 +63,22 @@ public class Main {
         } catch (SQLException e) {
             System.err.println("Error while reading data: " + e.getMessage());
         }
+        return rs;
     }
 
-    private static void insertData(Connection con, Scanner input) {
+    private static void insertData(Statement stmt, Scanner input) {
         System.out.print("\nEnter student name: ");
         String name = input.nextLine();
 
         System.out.print("Enter student age: ");
         int age = input.nextInt();
 
-        String query = "INSERT INTO students (name, age) VALUES (?, ?)";
+        String query = "INSERT INTO students (name, age) VALUES ('" + name + "', " + age + ")";
 
-        try (PreparedStatement pstmt = con.prepareStatement(query, Statement.RETURN_GENERATED_KEYS)) {
-
-            pstmt.setString(1, name);
-            pstmt.setInt(2, age);
-
-            if (pstmt.executeUpdate() > 0) {
-                try (ResultSet keys = pstmt.getGeneratedKeys()) {
-                    if (keys.next()) {
-                        System.out.println("Data inserted successfully! Generated ID: " + keys.getInt(1));
-                    }
-                }
-                readData(con);
+        try {
+            if (stmt.executeUpdate(query) > 0) {
+                System.out.println("Data inserted successfully!");
+                readData(stmt, null);
             } else {
                 System.out.println("Failed to insert data.");
             }
@@ -89,19 +87,16 @@ public class Main {
         }
     }
 
-    private static void deleteData(Connection con, Scanner input) {
+    private static void deleteData(Statement stmt, Scanner input) {
         System.out.print("\nEnter the ID of the student to delete: ");
         int idToDelete = input.nextInt();
 
-        String query = "DELETE FROM students WHERE id = ?";
+        String query = "DELETE FROM students WHERE id = " + idToDelete;
 
-        try (PreparedStatement pstmt = con.prepareStatement(query)) {
-
-            pstmt.setInt(1, idToDelete);
-
-            if (pstmt.executeUpdate() > 0) {
+        try {
+            if (stmt.executeUpdate(query) > 0) {
                 System.out.println("Student with ID " + idToDelete + " deleted successfully.");
-                readData(con);
+                readData(stmt, null);
             } else {
                 System.out.println("No student found with ID " + idToDelete);
             }
@@ -110,12 +105,12 @@ public class Main {
         }
     }
 
-    private static void updateData(Connection con, Scanner input) {
+    private static void updateData(Statement stmt, Scanner input) {
         System.out.print("\nEnter the ID of the student to update: ");
         int idToUpdate = input.nextInt();
         input.nextLine();
 
-        if (!doesStudentExist(con, idToUpdate)) {
+        if (!doesStudentExist(stmt, idToUpdate)) {
             System.out.println("No student found with ID " + idToUpdate);
             return;
         }
@@ -126,17 +121,12 @@ public class Main {
         System.out.print("Enter new age for student: ");
         int newAge = input.nextInt();
 
-        String query = "UPDATE students SET name = ?, age = ? WHERE id = ?";
+        String query = "UPDATE students SET name = '" + newName + "', age = " + newAge + " WHERE id = " + idToUpdate;
 
-        try (PreparedStatement pstmt = con.prepareStatement(query)) {
-
-            pstmt.setString(1, newName);
-            pstmt.setInt(2, newAge);
-            pstmt.setInt(3, idToUpdate);
-
-            if (pstmt.executeUpdate() > 0) {
+        try {
+            if (stmt.executeUpdate(query) > 0) {
                 System.out.println("Student data updated successfully.");
-                readData(con);
+                readData(stmt, null);
             } else {
                 System.out.println("Failed to update student data.");
             }
@@ -145,15 +135,11 @@ public class Main {
         }
     }
 
-    private static boolean doesStudentExist(Connection con, int id) {
-        String query = "SELECT 1 FROM students WHERE id = ?";
+    private static boolean doesStudentExist(Statement stmt, int id) {
+        String query = "SELECT 1 FROM students WHERE id = " + id;
 
-        try (PreparedStatement pstmt = con.prepareStatement(query)) {
-
-            pstmt.setInt(1, id);
-            try (ResultSet rs = pstmt.executeQuery()) {
-                return rs.next();
-            }
+        try (ResultSet rs = stmt.executeQuery(query)) {
+            return rs.next();
         } catch (SQLException e) {
             System.err.println("Error while checking student existence: " + e.getMessage());
         }
