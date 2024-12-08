@@ -2,22 +2,23 @@ import java.sql.*;
 import java.util.Scanner;
 
 public class Main {
-    private static final String URL = "jdbc:mysql://localhost:3306/mydb"; //mysql db name "mydb" ... change it to your own database name
-    private static final String USER = "root";   //it is default "root" for all in mysql
-    private static final String PASSWORD = "1234";   //change it to your database password
+    private static final String URL = "jdbc:mysql://localhost:3306/mydb";
+    private static final String USER = "root";
+    private static final String PASSWORD = "1234";
 
     public static void main(String[] args) {
-        try (Scanner input = new Scanner(System.in)) {
+        try (Scanner input = new Scanner(System.in);
+             Connection con = DriverManager.getConnection(URL, USER, PASSWORD)) {
             while (true) {
                 displayMenu();
                 int choice = input.nextInt();
                 input.nextLine();
 
                 switch (choice) {
-                    case 1 -> readData();
-                    case 2 -> insertData(input);
-                    case 3 -> deleteData(input);
-                    case 4 -> updateData(input);
+                    case 1 -> readData(con);
+                    case 2 -> insertData(con, input);
+                    case 3 -> deleteData(con, input);
+                    case 4 -> updateData(con, input);
                     case 5 -> {
                         System.out.println("Exiting the program...");
                         return;
@@ -25,6 +26,8 @@ public class Main {
                     default -> System.out.println("Invalid choice. Please try again.");
                 }
             }
+        } catch (SQLException e) {
+            System.err.println("Database error: " + e.getMessage());
         }
     }
 
@@ -38,15 +41,10 @@ public class Main {
         System.out.print("Enter your choice: ");
     }
 
-    private static Connection getConnection() throws SQLException {
-        return DriverManager.getConnection(URL, USER, PASSWORD);
-    }
-
-    private static void readData() {
+    private static void readData(Connection con) {
         String query = "SELECT * FROM students";
 
-        try (Connection con = getConnection();
-             Statement stmt = con.createStatement();
+        try (Statement stmt = con.createStatement();
              ResultSet rs = stmt.executeQuery(query)) {
 
             System.out.println("\nCurrent Students in the Database:");
@@ -62,7 +60,7 @@ public class Main {
         }
     }
 
-    private static void insertData(Scanner input) {
+    private static void insertData(Connection con, Scanner input) {
         System.out.print("\nEnter student name: ");
         String name = input.nextLine();
 
@@ -71,8 +69,7 @@ public class Main {
 
         String query = "INSERT INTO students (name, age) VALUES (?, ?)";
 
-        try (Connection con = getConnection();
-             PreparedStatement pstmt = con.prepareStatement(query, Statement.RETURN_GENERATED_KEYS)) {
+        try (PreparedStatement pstmt = con.prepareStatement(query, Statement.RETURN_GENERATED_KEYS)) {
 
             pstmt.setString(1, name);
             pstmt.setInt(2, age);
@@ -83,7 +80,7 @@ public class Main {
                         System.out.println("Data inserted successfully! Generated ID: " + keys.getInt(1));
                     }
                 }
-                readData();
+                readData(con);
             } else {
                 System.out.println("Failed to insert data.");
             }
@@ -92,20 +89,19 @@ public class Main {
         }
     }
 
-    private static void deleteData(Scanner input) {
+    private static void deleteData(Connection con, Scanner input) {
         System.out.print("\nEnter the ID of the student to delete: ");
         int idToDelete = input.nextInt();
 
         String query = "DELETE FROM students WHERE id = ?";
 
-        try (Connection con = getConnection();
-             PreparedStatement pstmt = con.prepareStatement(query)) {
+        try (PreparedStatement pstmt = con.prepareStatement(query)) {
 
             pstmt.setInt(1, idToDelete);
 
             if (pstmt.executeUpdate() > 0) {
                 System.out.println("Student with ID " + idToDelete + " deleted successfully.");
-                readData();
+                readData(con);
             } else {
                 System.out.println("No student found with ID " + idToDelete);
             }
@@ -114,12 +110,12 @@ public class Main {
         }
     }
 
-    private static void updateData(Scanner input) {
+    private static void updateData(Connection con, Scanner input) {
         System.out.print("\nEnter the ID of the student to update: ");
         int idToUpdate = input.nextInt();
         input.nextLine();
 
-        if (!doesStudentExist(idToUpdate)) {
+        if (!doesStudentExist(con, idToUpdate)) {
             System.out.println("No student found with ID " + idToUpdate);
             return;
         }
@@ -132,8 +128,7 @@ public class Main {
 
         String query = "UPDATE students SET name = ?, age = ? WHERE id = ?";
 
-        try (Connection con = getConnection();
-             PreparedStatement pstmt = con.prepareStatement(query)) {
+        try (PreparedStatement pstmt = con.prepareStatement(query)) {
 
             pstmt.setString(1, newName);
             pstmt.setInt(2, newAge);
@@ -141,7 +136,7 @@ public class Main {
 
             if (pstmt.executeUpdate() > 0) {
                 System.out.println("Student data updated successfully.");
-                readData();
+                readData(con);
             } else {
                 System.out.println("Failed to update student data.");
             }
@@ -150,11 +145,10 @@ public class Main {
         }
     }
 
-    private static boolean doesStudentExist(int id) {
+    private static boolean doesStudentExist(Connection con, int id) {
         String query = "SELECT 1 FROM students WHERE id = ?";
 
-        try (Connection con = getConnection();
-             PreparedStatement pstmt = con.prepareStatement(query)) {
+        try (PreparedStatement pstmt = con.prepareStatement(query)) {
 
             pstmt.setInt(1, id);
             try (ResultSet rs = pstmt.executeQuery()) {
